@@ -32,13 +32,26 @@ class SentryAPI(object):
         """ Generate a resource URL based from a given path. """
         return urllib.parse.urljoin(self.base_uri, path)
 
-    def return_or_raise(self, response):
+    def get_response(self, url):
         """
-        Returns the JSON format of the reponse if the request succeeds.
-        Otherwise, it raises an exception.
+        Generator that fetches the JSON response from a request.
+        Otherwise, it raises an HTTPError exception.
         """
+        response = self.session.get(url)
         if response.ok:
-            return response.json()
+            yield from response.json()
+
+            # Check if the response.links contains a ``next`` value. Make a
+            # new request if the ``results`` value is 'true' which means
+            # that there are more data in the next link.
+            # source: https://docs.sentry.io/api/pagination/
+            nxt = response.links['next']
+            while nxt['results'] == 'true':
+                url = nxt['url']
+                response = self.session.get(url)
+                yield from response.json()
+
+                nxt = response.links["next"]
         else:
             response.raise_for_status()
 
